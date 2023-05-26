@@ -20,3 +20,10 @@ jobs:
           components: rustfmt, clippy
       - name: test
         run: make rust-test
+      - name: make wasm
+        run: rustup target add wasm32-unknown-unknown && make wasm
+      - name: archive wasm build
+        uses: actions/upload-artifact@v3
+        with:
+          name: wasm-build
+          path: static/cedar.wasm
