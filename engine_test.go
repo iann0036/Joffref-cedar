@@ -72,10 +72,41 @@ func TestCedarEngine_IsAuthorizedJson(t *testing.T) {
 func TestCedarEngine_Validate(t *testing.T) {
 	policy := `
 	permit(
-		principal == User::"alice",
-		action    == Action::"update",
-		resource  == Photo::"VacationPhoto94.jpg"
+		principal,
+		action,
+		resource
 	);
+	`
+	schema := `{
+		"": {
+			"entityTypes": {
+				"User": {
+					"shape": {
+						"type": "Record",
+						"attributes": {
+							"department": { "type": "String" }
+						}
+					}
+				},
+				"Photo": {
+					"shape": {
+						"type": "Record",
+						"attributes": {
+							"private": { "type": "Boolean" }
+						}
+					}
+				}
+			},
+			"actions": {
+				"viewPhoto": {
+					"appliesTo": {
+						"principalTypes": [ "User" ],
+						"resourceTypes": [ "Photo" ]
+					}
+				}
+			}
+		}
+	}
 	`
 	engine, err := NewCedarEngine(context.TODO())
 	if err != nil {
@@ -91,7 +122,7 @@ func TestCedarEngine_Validate(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("validate pass", func(t *testing.T) {
-		res, err := engine.Validate(context.Background(), "{}", ValidationModeStrict)
+		res, err := engine.Validate(context.Background(), schema, ValidationModePermissive)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -101,8 +132,8 @@ func TestCedarEngine_Validate(t *testing.T) {
 	})
 	invalidPolicy := `
 	permit(
-		principal == User::"alice",
-		resource  == Photo::"VacationPhoto94.jpg"
+		principal == Banana::"invalid",
+		resource  == Apple::"foo"
 	);
 	`
 	err = engine.SetPolicies(context.Background(), invalidPolicy)
@@ -110,7 +141,7 @@ func TestCedarEngine_Validate(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("validate fail", func(t *testing.T) {
-		res, err := engine.Validate(context.Background(), "{}", ValidationModeStrict)
+		res, err := engine.Validate(context.Background(), schema, ValidationModeStrict)
 		if err != nil {
 			t.Fatal(err)
 		}

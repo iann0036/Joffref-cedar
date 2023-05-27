@@ -19,6 +19,10 @@ use serde::{Deserialize, Serialize};
 struct ValidationNote {
     #[serde(rename = "policyId")]
     policy_id: String,
+    #[serde(rename = "rangeStart")]
+    range_start: usize,
+    #[serde(rename = "rangeEnd")]
+    range_end: usize,
     note: String,
 }
 
@@ -62,7 +66,7 @@ impl CedarEngine {
         }
     }
     fn validate(&self, schema: &str, mode: &str) -> String  {
-        let schema = Schema::from_json_value(json!(schema)).expect("schema parse error");
+        let schema = Schema::from_str(schema).expect("invalid schema");
         let mode = match mode {
             "Strict" => Ok(ValidationMode::Strict),
             "Permissive" => Ok(ValidationMode::Permissive),
@@ -73,6 +77,8 @@ impl CedarEngine {
         let notes: Vec<ValidationNote> = response.validation_errors()
             .map(|error| ValidationNote {
                 policy_id: error.location().policy_id().to_string(),
+                range_start: error.location().range_start().unwrap_or_default(),
+                range_end: error.location().range_end().unwrap_or_default(),
                 note: format!("{}", error.error_kind()),
             })
             .collect();
