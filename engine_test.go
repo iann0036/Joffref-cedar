@@ -33,6 +33,42 @@ func TestCedarEngine_IsAuthorized(t *testing.T) {
 		isAuthorizedMustReturnDeny(t, engine, "User::\"alice\"", "Action::\"update\"", "Photo::\"VacationPhoto95.jpg\"")
 	})
 }
+func TestCedarEngine_IsAuthorizedJson(t *testing.T) {
+	policy := `
+	permit(
+		principal == User::"alice",
+		action    == Action::"update",
+		resource  == Photo::"VacationPhoto94.jpg"
+	);
+	`
+	engine, err := NewCedarEngine(context.TODO())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close(context.Background())
+	err = engine.SetEntitiesFromJson(context.Background(), "[]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = engine.SetPolicies(context.Background(), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("is authorized json", func(t *testing.T) {
+		res, err := engine.IsAuthorizedJson(context.Background(), EvalRequest{
+			Principal: "User::\"alice\"",
+			Action:    "Action::\"update\"",
+			Resource:  "Photo::\"VacationPhoto94.jpg\"",
+			Context:   "{}",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res {
+			t.Fatal("expected permit")
+		}
+	})
+}
 func isAuthorizedMustReturnAllow(t *testing.T, engine *CedarEngine, principal, action, resource string) {
 	res, err := engine.IsAuthorized(context.Background(), EvalRequest{
 		Principal: principal,

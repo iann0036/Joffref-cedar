@@ -3,7 +3,9 @@ package cedar
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
+
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 )
@@ -120,6 +122,62 @@ func (c *CedarEngine) Eval(ctx context.Context, req EvalRequest) (EvalResult, er
 	return EvalResult(decision), nil
 }
 
+// EvalDetail evaluates the request against the policies and entities in the engine.
+func (c *CedarEngine) EvalDetail(ctx context.Context, req EvalRequest) (EvalDetailResult, error) {
+	evalSize := uint64(len(req.Principal) + len(req.Action) + len(req.Resource) + len(req.Context))
+	evalPtr, err := c.exportedFuncs[string(allocate)].Call(ctx, evalSize)
+	if err != nil {
+		return EvalDetailResult{}, err
+	}
+	defer c.exportedFuncs[string(deallocate)].Call(ctx, evalPtr[0], evalSize)
+	ok := c.module.Memory().WriteString(uint32(evalPtr[0]), req.Principal)
+	if !ok {
+		return EvalDetailResult{}, fmt.Errorf("failed to write principal to memory")
+	}
+	offset := uint32(0)
+	offset += uint32(len(req.Principal))
+	ok = c.module.Memory().WriteString(uint32(evalPtr[0])+offset, req.Action)
+	if !ok {
+		return EvalDetailResult{}, fmt.Errorf("failed to write action to memory")
+	}
+	offset += uint32(len(req.Action))
+	ok = c.module.Memory().WriteString(uint32(evalPtr[0])+offset, req.Resource)
+	if !ok {
+		return EvalDetailResult{}, fmt.Errorf("failed to write resource to memory")
+	}
+	offset += uint32(len(req.Resource))
+	ok = c.module.Memory().WriteString(uint32(evalPtr[0])+offset, req.Context)
+	if !ok {
+		return EvalDetailResult{}, fmt.Errorf("failed to write context to memory")
+	}
+	resPtr, err := c.exportedFuncs[string(isAuthorizedJson)].Call(
+		ctx,
+		evalPtr[0],
+		uint64(len(req.Principal)),
+		evalPtr[0]+uint64(len(req.Principal)),
+		uint64(len(req.Action)),
+		evalPtr[0]+uint64(len(req.Principal))+uint64(len(req.Action)),
+		uint64(len(req.Resource)),
+		evalPtr[0]+uint64(len(req.Principal))+uint64(len(req.Action))+uint64(len(req.Resource)),
+		uint64(len(req.Context)),
+	)
+	if err != nil {
+		return EvalDetailResult{}, err
+	}
+	decisionPtr := uint32(resPtr[0] >> 32)
+	decisionSize := uint32(resPtr[0])
+	defer c.exportedFuncs[string(deallocate)].Call(ctx, uint64(decisionPtr), uint64(decisionSize))
+	decision, ok := c.module.Memory().Read(decisionPtr, decisionSize)
+	if !ok {
+		return EvalDetailResult{}, fmt.Errorf("failed to read decision from memory")
+	}
+	var result EvalDetailResult
+	if err := json.Unmarshal(decision, &result); err != nil {
+		return EvalDetailResult{}, fmt.Errorf("failed to parse evaluation result")
+	}
+	return result, nil
+}
+
 // IsAuthorized evaluates the request against the policies and entities in the engine and returns true if the request is authorized.
 // It is a convenience method that is equivalent to calling Eval and checking the result.
 // See Eval for more information.
@@ -129,6 +187,17 @@ func (c *CedarEngine) IsAuthorized(ctx context.Context, req EvalRequest) (bool, 
 		return false, err
 	}
 	return res.IsPermit(), nil
+}
+
+// IsAuthorizedJson evaluates the request against the policies and entities in the engine and returns true if the request is authorized.
+// It is a convenience method that is equivalent to calling EvalDetail and checking the result.
+// See EvalDetail for more information.
+func (c *CedarEngine) IsAuthorizedJson(ctx context.Context, req EvalRequest) (bool, error) {
+	res, err := c.EvalDetail(ctx, req)
+	if err != nil {
+		return false, err
+	}
+	return res.Decision.IsPermit(), nil
 }
 
 // Close closes the engine and cleanup the wasm runtime.

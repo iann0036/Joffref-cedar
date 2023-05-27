@@ -28,6 +28,16 @@ type EvalRequest struct {
 // EvalResult is the response object for the Eval function.
 type EvalResult string
 
+type EvalDetailResult struct {
+	Decision    EvalResult      `json:"decision"`
+	Diagnostics EvalDiagnostics `json:"diagnostics"`
+}
+
+type EvalDiagnostics struct {
+	Reason []string `json:"reason"`
+	Errors []string `json:"errors"`
+}
+
 const (
 	EvalResultPermit EvalResult = "Allow"
 	EvalResultDeny   EvalResult = "Deny"

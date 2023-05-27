@@ -63,6 +63,15 @@ impl CedarEngine {
             String::from("Deny")
         }
     }
+    fn is_authorized_json(&self, entity: &str, action: &str, resource: &str, context: &str) -> String  {
+        let principal = EntityUid::from_str(entity).expect("entity parse error");
+        let action = EntityUid::from_str(action).expect("entity parse error");
+        let resource = EntityUid::from_str(resource).expect("entity parse error");
+        let context = Context::from_json_str(context, None).unwrap();
+        let query = Request::new(Some(principal), Some(action), Some(resource), context);
+        let response = self.authorizer.is_authorized(&query, &self.policy_set, &self.entity_store);
+        return serde_json::to_string(&response).unwrap();
+    }
 }
 
 #[cfg_attr(all(target_arch = "wasm32"), export_name = "set_entities")]
@@ -97,6 +106,28 @@ pub unsafe extern "C" fn _is_authorized(
     let resource = ptr_to_string(resource_ptr, resource_len);
     let context = ptr_to_string(context_ptr, context_len);
     let result = ENGINE.is_authorized(entity.as_str(), action.as_str(), resource.as_str(), context.as_str());
+    let (ptr, len) = string_to_ptr(&result);
+    std::mem::forget(result);
+    return ((ptr as u64) << 32) | len as u64;
+}
+
+#[cfg_attr(all(target_arch = "wasm32"), export_name = "is_authorized_json")]
+#[no_mangle]
+pub unsafe extern "C" fn _is_authorized_json(
+    entity_ptr: u32,
+    entity_len: u32,
+    action_ptr: u32,
+    action_len: u32,
+    resource_ptr: u32,
+    resource_len: u32,
+    context_ptr: u32,
+    context_len: u32,
+) -> u64 {
+    let entity = ptr_to_string(entity_ptr, entity_len);
+    let action = ptr_to_string(action_ptr, action_len);
+    let resource = ptr_to_string(resource_ptr, resource_len);
+    let context = ptr_to_string(context_ptr, context_len);
+    let result = ENGINE.is_authorized_json(entity.as_str(), action.as_str(), resource.as_str(), context.as_str());
     let (ptr, len) = string_to_ptr(&result);
     std::mem::forget(result);
     return ((ptr as u64) << 32) | len as u64;
