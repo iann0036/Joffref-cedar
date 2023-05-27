@@ -3,13 +3,24 @@ extern crate core;
 extern crate wee_alloc;
 
 use std::mem::MaybeUninit;
-use cedar_policy::{PolicySet, Entities, Authorizer, EntityUid, Context, Request, Decision};
+use cedar_policy::{PolicySet, Entities, Authorizer, EntityUid, Context, Request, Decision, Validator, ValidationMode, Schema};
 
 use std::{slice};
 use std::collections::HashMap;
 use std::str::FromStr;
 
 use once_cell::sync::Lazy;
+
+use serde_json::json;
+use serde::{Deserialize, Serialize};
+
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ValidationNote {
+    #[serde(rename = "policyId")]
+    policy_id: String,
+    note: String,
+}
 
 static mut ENGINE: Lazy<CedarEngine>= Lazy::new(|| {
     CedarEngine {
@@ -26,7 +37,7 @@ static mut HEAP: Lazy<HashMap<* mut u8, Box<[MaybeUninit<u8>]>>> = Lazy::new(|| 
 struct CedarEngine {
     entity_store: Entities,
     policy_set: PolicySet,
-    authorizer: Authorizer
+    authorizer: Authorizer,
 }
 
 impl CedarEngine {
@@ -49,6 +60,26 @@ impl CedarEngine {
                 println!("Error adding policy: {}", e);
             }
         }
+    }
+    fn validate(&self, schema: &str, mode: &str) -> String  {
+        let schema = Schema::from_json_value(json!(schema)).expect("schema parse error");
+        let mode = match mode {
+            "Strict" => Ok(ValidationMode::Strict),
+            "Permissive" => Ok(ValidationMode::Permissive),
+            _ => Err("invalid validation mode"),
+        };
+        let validator = Validator::new(schema);
+        let response = validator.validate(&self.policy_set, mode.expect("invalid validation mode"));
+        let notes: Vec<ValidationNote> = response.validation_errors()
+            .map(|error| ValidationNote {
+                policy_id: error.location().policy_id().to_string(),
+                note: format!("{}", error.error_kind()),
+            })
+            .collect();
+        return json!({
+            "passed": response.validation_passed(),
+            "errors": notes,
+        }).to_string();
     }
     fn is_authorized(&self, entity: &str, action: &str, resource: &str, context: &str) -> String  {
         let principal = EntityUid::from_str(entity).expect("entity parse error");
@@ -86,6 +117,22 @@ pub unsafe extern "C" fn _set_entities(entities_ptr: u32, entities_len: u32) {
 pub unsafe extern "C" fn _set_policies(policies_ptr: u32, policies_len: u32) {
     let policies = ptr_to_string(policies_ptr, policies_len);
     ENGINE.set_policies(&policies);
+}
+
+#[cfg_attr(all(target_arch = "wasm32"), export_name = "validate")]
+#[no_mangle]
+pub unsafe extern "C" fn _validate(
+    schema_ptr: u32,
+    schema_len: u32,
+    mode_ptr: u32,
+    mode_len: u32,
+) -> u64 {
+    let schema = ptr_to_string(schema_ptr, schema_len);
+    let mode = ptr_to_string(mode_ptr, mode_len);
+    let result = ENGINE.validate(schema.as_str(), mode.as_str());
+    let (ptr, len) = string_to_ptr(&result);
+    std::mem::forget(result);
+    return ((ptr as u64) << 32) | len as u64;
 }
 
 

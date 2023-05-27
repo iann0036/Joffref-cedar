@@ -178,6 +178,48 @@ func (c *CedarEngine) EvalDetail(ctx context.Context, req EvalRequest) (EvalDeta
 	return result, nil
 }
 
+// Validate validates that policies in the engine are valid and returns a block of errors otherwise.
+func (c *CedarEngine) Validate(ctx context.Context, schema, mode string) (ValidationResult, error) {
+	evalSize := uint64(len(schema) + len(mode))
+	evalPtr, err := c.exportedFuncs[string(allocate)].Call(ctx, evalSize)
+	if err != nil {
+		return ValidationResult{}, err
+	}
+	defer c.exportedFuncs[string(deallocate)].Call(ctx, evalPtr[0], evalSize)
+	ok := c.module.Memory().WriteString(uint32(evalPtr[0]), schema)
+	if !ok {
+		return ValidationResult{}, fmt.Errorf("failed to write schema to memory")
+	}
+	offset := uint32(0)
+	offset += uint32(len(schema))
+	ok = c.module.Memory().WriteString(uint32(evalPtr[0])+offset, mode)
+	if !ok {
+		return ValidationResult{}, fmt.Errorf("failed to write mode to memory")
+	}
+	resPtr, err := c.exportedFuncs[string(validate)].Call(
+		ctx,
+		evalPtr[0],
+		uint64(len(schema)),
+		evalPtr[0]+uint64(len(schema)),
+		uint64(len(mode)))
+	if err != nil {
+		return ValidationResult{}, err
+	}
+	validationPtr := uint32(resPtr[0] >> 32)
+	validationSize := uint32(resPtr[0])
+	defer c.exportedFuncs[string(deallocate)].Call(ctx, uint64(validationPtr), uint64(validationSize))
+	validation, ok := c.module.Memory().Read(validationPtr, validationSize)
+	if !ok {
+		return ValidationResult{}, fmt.Errorf("failed to read validation from memory")
+	}
+	var result ValidationResult
+	if err := json.Unmarshal(validation, &result); err != nil {
+		return ValidationResult{}, fmt.Errorf("failed to parse validation result")
+	}
+
+	return result, nil
+}
+
 // IsAuthorized evaluates the request against the policies and entities in the engine and returns true if the request is authorized.
 // It is a convenience method that is equivalent to calling Eval and checking the result.
 // See Eval for more information.

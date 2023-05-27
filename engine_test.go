@@ -69,6 +69,56 @@ func TestCedarEngine_IsAuthorizedJson(t *testing.T) {
 		}
 	})
 }
+func TestCedarEngine_Validate(t *testing.T) {
+	policy := `
+	permit(
+		principal == User::"alice",
+		action    == Action::"update",
+		resource  == Photo::"VacationPhoto94.jpg"
+	);
+	`
+	engine, err := NewCedarEngine(context.TODO())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close(context.Background())
+	err = engine.SetEntitiesFromJson(context.Background(), "[]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = engine.SetPolicies(context.Background(), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("validate pass", func(t *testing.T) {
+		res, err := engine.Validate(context.Background(), "{}", ValidationModeStrict)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.Passed {
+			t.Fatal("expected validate pass but got failure")
+		}
+	})
+	invalidPolicy := `
+	permit(
+		principal == User::"alice",
+		resource  == Photo::"VacationPhoto94.jpg"
+	);
+	`
+	err = engine.SetPolicies(context.Background(), invalidPolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("validate fail", func(t *testing.T) {
+		res, err := engine.Validate(context.Background(), "{}", ValidationModeStrict)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Passed {
+			t.Fatal("expected validate failure but got pass")
+		}
+	})
+}
 func isAuthorizedMustReturnAllow(t *testing.T, engine *CedarEngine, principal, action, resource string) {
 	res, err := engine.IsAuthorized(context.Background(), EvalRequest{
 		Principal: principal,

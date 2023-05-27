@@ -9,6 +9,7 @@ const (
 	deallocate       function = "deallocate"
 	setEntities      function = "set_entities"
 	setPolicies      function = "set_policies"
+	validate         function = "validate"
 	isAuthorized     function = "is_authorized"
 	isAuthorizedJson function = "is_authorized_json"
 )
@@ -20,6 +21,7 @@ func exportFuncs(module api.Module) map[string]api.Function {
 	exportedFuncs[string(isAuthorizedJson)] = module.ExportedFunction(string(isAuthorizedJson))
 	exportedFuncs[string(setEntities)] = module.ExportedFunction(string(setEntities))
 	exportedFuncs[string(setPolicies)] = module.ExportedFunction(string(setPolicies))
+	exportedFuncs[string(validate)] = module.ExportedFunction(string(validate))
 	// allocate and deallocate help us manage memory in the wasm module.
 	exportedFuncs[string(allocate)] = module.ExportedFunction(string(allocate))
 	exportedFuncs[string(deallocate)] = module.ExportedFunction(string(deallocate))
