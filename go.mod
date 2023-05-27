@@ -1,4 +1,4 @@
-module github.com/Joffref/cedar
+module github.com/iann0036/Joffref-cedar
 
 go 1.20
 
