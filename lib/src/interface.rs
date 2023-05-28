@@ -318,6 +318,127 @@ mod test {
     }
 
     #[test]
+    fn validate() {
+        let mut engine = CedarEngine{
+            authorizer: Authorizer::new(),
+            entity_store: Entities::empty(),
+            policy_set: PolicySet::new(),
+        };
+        let policies = r#"permit(principal, action, resource); forbid(principal == PhotoFlash::User::"alice", action, resource);"#;
+        engine.set_policies(policies);
+        let result = engine.validate(r#"{
+            "PhotoFlash": {
+                "entityTypes": {
+                    "User": {
+                        "memberOfTypes": [ "UserGroup" ],
+                        "shape": {
+                            "type": "Record",
+                            "attributes": {
+                                "department": { "type": "String" },
+                                "jobLevel": { "type": "Long" }
+                            }
+                        }
+                    },
+                    "UserGroup": { },
+                    "Photo": {
+                        "memberOfTypes": [ "Album" ],
+                        "shape": {
+                            "type": "Record",
+                            "attributes": {
+                                "private": { "type": "Boolean" },
+                                "account": {
+                                    "type": "Entity",
+                                    "name": "Account"
+                                }
+                            }
+                        }
+                    },
+                    "Album": {
+                        "memberOfTypes": [ "Album" ],
+                        "shape": {
+                            "type": "Record",
+                            "attributes": {
+                                "private": { "type": "Boolean" },
+                                "account": {
+                                    "type": "Entity",
+                                    "name": "Account"
+                                }
+                            }
+                        }
+                    },
+                    "Account": {
+                        "memberOfTypes": [],
+                        "shape": {
+                            "type": "Record",
+                            "attributes": {
+                                "owner": {
+                                    "type": "Entity",
+                                    "name": "User"
+                                },
+                                "admins": {
+                                    "required": false,
+                                    "type": "Set",
+                                    "element": {
+                                        "type": "Entity",
+                                        "name": "User"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "actions": {
+                    "viewPhoto": {
+                        "appliesTo": {
+                            "principalTypes": [ "User" ],
+                            "resourceTypes": [ "Photo" ],
+                            "context": {
+                                "type": "Record",
+                                "attributes": {
+                                    "authenticated": { "type": "Boolean" }
+                                }
+                            }
+                        }
+                    },
+                    "listAlbums": {
+                        "appliesTo": {
+                            "principalTypes": [ "User" ],
+                            "resourceTypes": [ "Account" ],
+                            "context": {
+                                "type": "Record",
+                                "attributes": {
+                                    "authenticated": { "type": "Boolean" }
+                                }
+                            }
+                        }
+                    },
+                    "uploadPhoto": {
+                        "appliesTo": {
+                            "principalTypes": [ "User" ],
+                            "resourceTypes": [ "Album" ],
+                            "context": {
+                                "type": "Record",
+                                "attributes": {
+                                    "authenticated": { "type": "Boolean" },
+                                    "photo": {
+                                        "type": "Record",
+                                        "attributes": {
+                                            "file_size": { "type": "Long" },
+                                            "file_type": { "type": "String" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        "#, "Permissive");
+        assert_eq!(result, r#"{"passed":true,"errors":[]}"#);
+    }
+
+    #[test]
     fn evaluate() {
         let mut engine = CedarEngine{
             authorizer: Authorizer::new(),
