@@ -1,3 +1,5 @@
+# See new official bindings: https://github.com/cedar-policy/cedar-go
+
 # Cedar Go
 [![Go Report Card](https://goreportcard.com/badge/github.com/Joffref/cedar)](https://goreportcard.com/report/github.com/Joffref/cedar)
 [![GoDoc](https://godoc.org/github.com/Joffref/cedar?status.svg)](https://godoc.org/github.com/Joffref/cedar)
